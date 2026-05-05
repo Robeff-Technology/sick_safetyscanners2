@@ -152,6 +152,7 @@ void SickSafetyscanners::stopCommunication() {
   m_device->stop();
   m_diagnosed_laser_scan_publisher.reset();
   m_diagnostic_updater.reset();
+  m_contamination_warning_publisher.reset();
 }
 
 std::string boolToString(bool b) { return b ? "true" : "false"; }

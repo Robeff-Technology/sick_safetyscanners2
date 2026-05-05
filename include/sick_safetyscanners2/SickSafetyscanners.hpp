@@ -36,6 +36,8 @@
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include <diagnostic_updater/publisher.hpp>
 
+#include <std_msgs/msg/bool.hpp>
+
 #include <sick_safetyscanners_base/SickSafetyscanners.h>
 
 #include <sick_safetyscanners2_interfaces/srv/field_data.hpp>
@@ -278,6 +280,7 @@ public:
   // Diagnostics
   std::shared_ptr<diagnostic_updater::Updater> m_diagnostic_updater;
   std::shared_ptr<DiagnosedLaserScanPublisher> m_diagnosed_laser_scan_publisher;
+    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr m_contamination_warning_publisher;
 
   // Device and Communication
   std::unique_ptr<sick::AsyncSickSafetyScanner> m_device;
@@ -314,6 +317,11 @@ public:
 
     m_diagnostic_updater->add("State", this,
                               &SickSafetyscanners::sensorDiagnostics);
+
+    // Contamination boolean publisher
+    m_contamination_warning_publisher =
+      node->template create_publisher<std_msgs::msg::Bool>(
+        "sick_contamination_warning", 1);
 
     // Start async receiving and processing of sensor data
     RCLCPP_INFO(getLogger(), "Run");

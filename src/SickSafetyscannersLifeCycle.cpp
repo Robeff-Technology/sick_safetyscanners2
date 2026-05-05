@@ -171,5 +171,11 @@ void SickSafetyscannersLifeCycle::receiveUDPPaket(
 
   m_last_raw_msg = m_config.m_msg_creator->createRawDataMsg(data);
   m_raw_data_publisher->publish(m_last_raw_msg);
+  std_msgs::msg::Bool contamination_warning_msg;
+  contamination_warning_msg.data =
+      m_last_raw_msg.general_system_state.contamination_warning;
+  if (m_contamination_warning_publisher) {
+    m_contamination_warning_publisher->publish(contamination_warning_msg);
+  }
 }
 } // namespace sick
