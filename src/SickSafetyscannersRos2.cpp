@@ -111,5 +111,10 @@ void SickSafetyscannersRos2::receiveUDPPaket(
   if (m_contamination_warning_publisher) {
     m_contamination_warning_publisher->publish(contamination_warning_msg);
   }
+
+  if (m_contamination_level_publisher) {
+    m_contamination_level_publisher->publish(
+        createContaminationLevelMsg(data, this->now()));
+  }
 }
 } // namespace sick

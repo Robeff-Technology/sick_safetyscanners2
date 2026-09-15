@@ -43,6 +43,8 @@
 #include <sick_safetyscanners2_interfaces/srv/field_data.hpp>
 #include <sick_safetyscanners2_interfaces/srv/status_overview.hpp>
 
+#include <sick_safetyscanners2_interfaces/msg/contamination_level.hpp>
+
 #include <sick_safetyscanners2/utils/Conversions.h>
 #include <sick_safetyscanners2/utils/MessageCreator.h>
 
@@ -132,6 +134,9 @@ public:
     node.template declare_parameter<double>("frequency_tolerance", 0.1);
     node.template declare_parameter<double>("timestamp_min_acceptable", -1);
     node.template declare_parameter<double>("timestamp_max_acceptable", 1);
+    node.template declare_parameter<int>("contamination_sectors", 12);
+    node.template declare_parameter<double>("contamination_filter_alpha",
+                                            0.02);
   }
 
   /**
@@ -270,6 +275,30 @@ public:
                                         m_config.m_timestamp_max_acceptable);
     RCLCPP_INFO(getLogger(), "timestamp_max_acceptable: %f",
                 m_config.m_timestamp_max_acceptable);
+
+    node.template get_parameter<int>("contamination_sectors",
+                                     m_contamination_sectors);
+    if (m_contamination_sectors < 1) {
+      RCLCPP_WARN(getLogger(),
+                  "contamination_sectors must be >= 1, got %i, using 1",
+                  m_contamination_sectors);
+      m_contamination_sectors = 1;
+    }
+    RCLCPP_INFO(getLogger(), "contamination_sectors: %i",
+                m_contamination_sectors);
+
+    node.template get_parameter<double>("contamination_filter_alpha",
+                                        m_contamination_filter_alpha);
+    if (m_contamination_filter_alpha <= 0.0 ||
+        m_contamination_filter_alpha > 1.0) {
+      RCLCPP_WARN(getLogger(),
+                  "contamination_filter_alpha must be in (0, 1], got %f, "
+                  "using 0.02",
+                  m_contamination_filter_alpha);
+      m_contamination_filter_alpha = 0.02;
+    }
+    RCLCPP_INFO(getLogger(), "contamination_filter_alpha: %f",
+                m_contamination_filter_alpha);
   }
 
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr
@@ -280,7 +309,18 @@ public:
   // Diagnostics
   std::shared_ptr<diagnostic_updater::Updater> m_diagnostic_updater;
   std::shared_ptr<DiagnosedLaserScanPublisher> m_diagnosed_laser_scan_publisher;
-    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr m_contamination_warning_publisher;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr
+      m_contamination_warning_publisher;
+  rclcpp::Publisher<
+      sick_safetyscanners2_interfaces::msg::ContaminationLevel>::SharedPtr
+      m_contamination_level_publisher;
+
+  // Contamination level filter state. Negative means "not yet initialized",
+  // so the first scan seeds the EMA instead of ramping up from zero.
+  int m_contamination_sectors = 12;
+  double m_contamination_filter_alpha = 0.02;
+  double m_contamination_ema_warning = -1.0;
+  double m_contamination_ema_contamination = -1.0;
 
   // Device and Communication
   std::unique_ptr<sick::AsyncSickSafetyScanner> m_device;
@@ -323,6 +363,11 @@ public:
       node->template create_publisher<std_msgs::msg::Bool>(
         "sick_contamination_warning", 1);
 
+    // Continuous contamination level publisher
+    m_contamination_level_publisher = node->template create_publisher<
+        sick_safetyscanners2_interfaces::msg::ContaminationLevel>(
+        "sick_contamination_level", 1);
+
     // Start async receiving and processing of sensor data
     RCLCPP_INFO(getLogger(), "Run");
     m_device->run();
@@ -333,6 +378,17 @@ public:
    * Stop the sensor communication
    */
   void stopCommunication();
+
+  /**
+   * Build the continuous contamination level message from the per-beam
+   * contamination bits of a scan, updating the EMA filter state.
+   *
+   * @param data Sensor data of a single scan
+   * @param now Timestamp for the message header
+   */
+  sick_safetyscanners2_interfaces::msg::ContaminationLevel
+  createContaminationLevelMsg(const sick::datastructure::Data &data,
+                              const rclcpp::Time &now);
 
   // Diagnostics
   sick_safetyscanners2_interfaces::msg::RawMicroScanData m_last_raw_msg;

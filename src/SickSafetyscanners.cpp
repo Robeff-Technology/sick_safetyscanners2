@@ -32,6 +32,9 @@
 
 #include <sick_safetyscanners2/SickSafetyscanners.hpp>
 
+#include <algorithm>
+#include <vector>
+
 namespace sick {
 rcl_interfaces::msg::SetParametersResult SickSafetyscanners::parametersCallback(
     std::vector<rclcpp::Parameter> parameters) {
@@ -153,6 +156,105 @@ void SickSafetyscanners::stopCommunication() {
   m_diagnosed_laser_scan_publisher.reset();
   m_diagnostic_updater.reset();
   m_contamination_warning_publisher.reset();
+  m_contamination_level_publisher.reset();
+  m_contamination_ema_warning = -1.0;
+  m_contamination_ema_contamination = -1.0;
+}
+
+sick_safetyscanners2_interfaces::msg::ContaminationLevel
+SickSafetyscanners::createContaminationLevelMsg(
+    const sick::datastructure::Data &data, const rclcpp::Time &now) {
+  sick_safetyscanners2_interfaces::msg::ContaminationLevel msg;
+  msg.header.stamp = now;
+  msg.header.frame_id = m_config.m_frame_id;
+
+  const std::vector<sick::datastructure::ScanPoint> scan_points =
+      data.getMeasurementDataPtr()->getScanPointsVector();
+
+  const auto sectors = static_cast<size_t>(m_contamination_sectors);
+  std::vector<uint32_t> sector_warning(sectors, 0);
+  std::vector<uint32_t> sector_total(sectors, 0);
+
+  if (!scan_points.empty()) {
+    msg.sector_angle_min = scan_points.front().getAngle() + m_config.m_angle_offset;
+    msg.sector_angle_max = scan_points.back().getAngle() + m_config.m_angle_offset;
+  }
+
+  // The scan points are ordered by angle, so the index already carries the
+  // angular information; bucketing by index keeps the sectors evenly sized
+  // regardless of the configured angular resolution.
+  for (size_t i = 0; i < scan_points.size(); ++i) {
+    const sick::datastructure::ScanPoint &scan_point = scan_points[i];
+
+    // Invalid beams carry no contamination information. Counting them would
+    // make the ratio depend on what the sensor happens to be looking at.
+    if (!scan_point.getValidBit()) {
+      continue;
+    }
+
+    ++msg.valid_beams;
+
+    const size_t sector = std::min(i * sectors / scan_points.size(), sectors - 1);
+    ++sector_total[sector];
+
+    if (scan_point.getContaminationWarningBit()) {
+      ++msg.warning_beams;
+      ++sector_warning[sector];
+    }
+    if (scan_point.getContaminationBit()) {
+      ++msg.contamination_beams;
+    }
+  }
+
+  if (msg.valid_beams > 0) {
+    msg.instant_warning = 100.f * static_cast<float>(msg.warning_beams) /
+                          static_cast<float>(msg.valid_beams);
+    msg.instant_contamination = 100.f *
+                                static_cast<float>(msg.contamination_beams) /
+                                static_cast<float>(msg.valid_beams);
+  }
+
+  // A single scan is noisy; contamination builds up over minutes to hours, so
+  // the filtered value is what a threshold should be applied to. The first
+  // scan seeds the filter to avoid a slow ramp-up from zero after startup.
+  const double alpha = m_contamination_filter_alpha;
+  if (msg.valid_beams == 0) {
+    // Nothing to learn from this scan, hold the previous value.
+  } else if (m_contamination_ema_warning < 0.0) {
+    m_contamination_ema_warning = msg.instant_warning;
+    m_contamination_ema_contamination = msg.instant_contamination;
+  } else {
+    m_contamination_ema_warning = (1.0 - alpha) * m_contamination_ema_warning +
+                                  alpha * msg.instant_warning;
+    m_contamination_ema_contamination =
+        (1.0 - alpha) * m_contamination_ema_contamination +
+        alpha * msg.instant_contamination;
+  }
+  // The filter state uses a negative sentinel for "not yet seeded"; never let
+  // that reach the message, the published level is always a valid percentage.
+  msg.level_warning = m_contamination_ema_warning < 0.0
+                          ? msg.instant_warning
+                          : static_cast<float>(m_contamination_ema_warning);
+  msg.level_contamination =
+      m_contamination_ema_contamination < 0.0
+          ? msg.instant_contamination
+          : static_cast<float>(m_contamination_ema_contamination);
+
+  msg.sector_warning.resize(sectors);
+  for (size_t i = 0; i < sectors; ++i) {
+    msg.sector_warning[i] =
+        sector_total[i] > 0 ? 100.f * static_cast<float>(sector_warning[i]) /
+                                  static_cast<float>(sector_total[i])
+                            : 0.f;
+  }
+
+  if (!data.getGeneralSystemStatePtr()->isEmpty()) {
+    msg.device_warning =
+        data.getGeneralSystemStatePtr()->getContaminationWarning();
+    msg.device_error = data.getGeneralSystemStatePtr()->getContaminationError();
+  }
+
+  return msg;
 }
 
 std::string boolToString(bool b) { return b ? "true" : "false"; }
