@@ -1,32 +1,45 @@
+# Parametreler config/sick_safetyscanners2.param.yaml dosyasindan okunur.
+# Baska bir dosya kullanmak icin:
+#   ros2 launch sick_safetyscanners2 sick_safetyscanners2_launch.py \
+#       params_file:=/yol/benim_scanner.param.yaml
+
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
+
 
 def generate_launch_description():
-    return LaunchDescription([
-        Node(
-            package="sick_safetyscanners2",
-            executable="sick_safetyscanners2_node",
-            name="sick_safetyscanners2_node",
-            output="screen",
-            emulate_tty=True,
-            parameters=[
-                {"frame_id": "scan",
-                 "sensor_ip": "192.168.5.10",
-                 "host_ip": "192.168.5.11",
-                 "host_udp_port": 0,
-                 "channel": 0,
-                 "channel_enabled": True,
-                 "skip": 0,
-                 "angle_start": 0.0,
-                 "angle_end": 0.0,
-                 "time_offset": 0.0,
-                 "general_system_state": True,
-                 "derived_settings": True,
-                 "measurement_data": True,
-                 "intrusion_data": True,
-                 "application_io_data": True,
-                 "use_persistent_config": False,
-                 "min_intensities": 0.0}
-            ]
-        )
-    ])
+    default_params_file = PathJoinSubstitution(
+        [
+            FindPackageShare("sick_safetyscanners2"),
+            "config",
+            "sick_safetyscanners2.param.yaml",
+        ]
+    )
+
+    declared_arguments = [
+        DeclareLaunchArgument(
+            "params_file",
+            default_value=default_params_file,
+            description="Surucu parametrelerini iceren YAML dosyasi.",
+        ),
+        DeclareLaunchArgument(
+            "namespace",
+            default_value="",
+            description="Dugumun calisacagi namespace.",
+        ),
+    ]
+
+    driver_node = Node(
+        package="sick_safetyscanners2",
+        executable="sick_safetyscanners2_node",
+        name="sick_safetyscanners2_node",
+        namespace=LaunchConfiguration("namespace"),
+        output="screen",
+        emulate_tty=True,
+        parameters=[LaunchConfiguration("params_file")],
+    )
+
+    return LaunchDescription(declared_arguments + [driver_node])

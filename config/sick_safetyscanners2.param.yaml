@@ -1,0 +1,61 @@
+# Sick safetyscanners2 surucu parametreleri.
+#
+# "/**" joker dugum adidir: hem sick_safetyscanners2_node hem de
+# sick_safetyscanners2_lifecycle_node icin, hangi namespace altinda
+# calisirsa calissin gecerlidir.
+
+/**:
+  ros__parameters:
+
+    # --- Ag ---------------------------------------------------------------
+    sensor_ip: "192.168.5.10"     # Tarayicinin IP adresi
+    host_ip: "192.168.5.11"       # UDP verisinin gonderilecegi host adresi
+    interface_ip: "0.0.0.0"       # Multicast icin dinlenecek arayuz
+    host_udp_port: 0              # 0 = surucu bos bir port secsin
+
+    # --- Tarama ------------------------------------------------------------
+    frame_id: "scan"
+    channel: 0
+    channel_enabled: true
+    skip: 0                       # n tarama atla; 0 = her taramayi yayinla
+    angle_start: 0.0              # radyan; start == end ise tam acikliktir
+    angle_end: 0.0
+    time_offset: 0.0
+    min_intensities: 0.0          # bu degerin altindaki noktalar inf yapilir
+
+    # --- Telegram icerigi --------------------------------------------------
+    # general_system_state kapatilirsa cihazin kendi kontaminasyon bitleri
+    # gelmez; contamination seviyesinin device_warning / device_error
+    # alanlari da anlamsizlasir.
+    general_system_state: true
+    derived_settings: true
+    measurement_data: true
+    intrusion_data: true
+    application_io_data: true
+
+    use_persistent_config: false
+
+    # --- Diagnostics -------------------------------------------------------
+    expected_frequency: 34.0
+    frequency_tolerance: 0.1
+    timestamp_min_acceptable: -1.0
+    timestamp_max_acceptable: 1.0
+
+    # --- Kontaminasyon seviyesi --------------------------------------------
+    # sick_contamination_level topic'ini uretir. Cihazin kendi ikili
+    # contamination_warning / contamination_error bitleri Safety Designer'daki
+    # sabit esiklere baglidir; bu iki parametre beam bazli bitlerden turetilen
+    # surekli yuzdeyi ayarlar, boylece esigi uygulama tarafinda secebilirsiniz.
+
+    # sector_warning dizisinin uzunlugu. Kirin camin hangi acisal bolgesinde
+    # toplandigini gormek icin kullanilir. En az 1.
+    contamination_sectors: 12
+
+    # EMA filtre katsayisi, (0, 1] araligi. Kucuk deger = yavas ve kararli,
+    # buyuk deger = hizli ve gurultulu.
+    # Zaman sabiti yaklasik olarak: 1 / (alpha * tarama_frekansi)
+    #   0.02  -> ~1.5 sn  (varsayilan)
+    #   0.001 -> ~30 sn   (kir birikimi izlemek icin daha uygun)
+    # Esik her zaman filtrelenmis level_* alanlarina uygulanmalidir;
+    # instant_* alanlari teshis icindir.
+    contamination_filter_alpha: 0.02
