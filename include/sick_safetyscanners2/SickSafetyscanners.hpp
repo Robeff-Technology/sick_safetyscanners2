@@ -44,6 +44,7 @@
 #include <sick_safetyscanners2_interfaces/srv/status_overview.hpp>
 
 #include <sick_safetyscanners2_interfaces/msg/contamination_level.hpp>
+#include <sick_safetyscanners2_interfaces/msg/contamination_measurement.hpp>
 
 #include <sick_safetyscanners2/utils/Conversions.h>
 #include <sick_safetyscanners2/utils/MessageCreator.h>
@@ -137,6 +138,8 @@ public:
     node.template declare_parameter<int>("contamination_sectors", 12);
     node.template declare_parameter<double>("contamination_filter_alpha",
                                             0.02);
+    node.template declare_parameter<std::string>("device_variant", "nanoScan3");
+    node.template declare_parameter<double>("contamination_poll_period", 5.0);
   }
 
   /**
@@ -299,6 +302,28 @@ public:
     }
     RCLCPP_INFO(getLogger(), "contamination_filter_alpha: %f",
                 m_contamination_filter_alpha);
+
+    std::string device_variant;
+    node.template get_parameter<std::string>("device_variant", device_variant);
+    if (device_variant == "microScan3") {
+      m_device_variant = sick::datastructure::ContaminationVariant::MICRO_SCAN3;
+    } else if (device_variant == "outdoorScan3") {
+      m_device_variant =
+          sick::datastructure::ContaminationVariant::OUTDOOR_SCAN3;
+    } else {
+      if (device_variant != "nanoScan3") {
+        RCLCPP_WARN(getLogger(),
+                    "unknown device_variant '%s', using nanoScan3",
+                    device_variant.c_str());
+      }
+      m_device_variant = sick::datastructure::ContaminationVariant::NANO_SCAN3;
+    }
+    RCLCPP_INFO(getLogger(), "device_variant: %s", device_variant.c_str());
+
+    node.template get_parameter<double>("contamination_poll_period",
+                                        m_contamination_poll_period);
+    RCLCPP_INFO(getLogger(), "contamination_poll_period: %f",
+                m_contamination_poll_period);
   }
 
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr
@@ -321,6 +346,15 @@ public:
   double m_contamination_filter_alpha = 0.02;
   double m_contamination_ema_warning = -1.0;
   double m_contamination_ema_contamination = -1.0;
+
+  // Device contamination measurement, read over CoLa2 on a timer.
+  rclcpp::Publisher<
+      sick_safetyscanners2_interfaces::msg::ContaminationMeasurement>::SharedPtr
+      m_contamination_measurement_publisher;
+  rclcpp::TimerBase::SharedPtr m_contamination_measurement_timer;
+  sick::datastructure::ContaminationVariant m_device_variant =
+      sick::datastructure::ContaminationVariant::NANO_SCAN3;
+  double m_contamination_poll_period = 5.0;
 
   // Device and Communication
   std::unique_ptr<sick::AsyncSickSafetyScanner> m_device;
@@ -368,6 +402,18 @@ public:
         sick_safetyscanners2_interfaces::msg::ContaminationLevel>(
         "sick_contamination_level", 1);
 
+    // Device contamination measurement, polled over CoLa2. Contamination
+    // builds up over minutes to hours, so a slow poll is enough and keeps the
+    // CoLa2 session free for everything else.
+    m_contamination_measurement_publisher = node->template create_publisher<
+        sick_safetyscanners2_interfaces::msg::ContaminationMeasurement>(
+        "sick_contamination_measurement", 1);
+    if (m_contamination_poll_period > 0.0) {
+      m_contamination_measurement_timer = node->create_wall_timer(
+          std::chrono::duration<double>(m_contamination_poll_period),
+          [this, node]() { publishContaminationMeasurement(node->now()); });
+    }
+
     // Start async receiving and processing of sensor data
     RCLCPP_INFO(getLogger(), "Run");
     m_device->run();
@@ -389,6 +435,13 @@ public:
   sick_safetyscanners2_interfaces::msg::ContaminationLevel
   createContaminationLevelMsg(const sick::datastructure::Data &data,
                               const rclcpp::Time &now);
+
+  /*!
+   * Read the device's own contamination measurement over CoLa2 and publish it.
+   *
+   * @param now Timestamp for the message header
+   */
+  void publishContaminationMeasurement(const rclcpp::Time &now);
 
   // Diagnostics
   sick_safetyscanners2_interfaces::msg::RawMicroScanData m_last_raw_msg;

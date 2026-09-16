@@ -157,6 +157,8 @@ void SickSafetyscanners::stopCommunication() {
   m_diagnostic_updater.reset();
   m_contamination_warning_publisher.reset();
   m_contamination_level_publisher.reset();
+  m_contamination_measurement_timer.reset();
+  m_contamination_measurement_publisher.reset();
   m_contamination_ema_warning = -1.0;
   m_contamination_ema_contamination = -1.0;
 }
@@ -255,6 +257,53 @@ SickSafetyscanners::createContaminationLevelMsg(
   }
 
   return msg;
+}
+
+void SickSafetyscanners::publishContaminationMeasurement(
+    const rclcpp::Time &now) {
+  if (!m_contamination_measurement_publisher || !m_device) {
+    return;
+  }
+
+  sick::datastructure::ContaminationInfo info;
+  if (!m_device->requestContaminationInfo(m_device_variant, info)) {
+    // The base class has no node handle, so throttle against a local clock.
+    static rclcpp::Clock throttle_clock(RCL_STEADY_TIME);
+    RCLCPP_WARN_THROTTLE(
+        getLogger(), throttle_clock, 60000,
+        "Could not read the contamination measurement from the device. The "
+        "configured device_variant may be wrong, or the firmware may not "
+        "support this variable.");
+    return;
+  }
+
+  sick_safetyscanners2_interfaces::msg::ContaminationMeasurement msg;
+  msg.header.stamp = now;
+  msg.header.frame_id = m_config.m_frame_id;
+  msg.processing_state = info.getProcessingState();
+  msg.valid = info.isValid();
+
+  const std::vector<sick::datastructure::ContaminationSector> &sectors =
+      info.getSectors();
+
+  double level_sum = 0.0;
+  for (const auto &sector : sectors) {
+    msg.sector_level.push_back(sector.level);
+    msg.sector_warning.push_back(sector.warning);
+    msg.sector_error.push_back(sector.error);
+    msg.sector_angle_start.push_back(sector.angle_start);
+    msg.sector_angle_end.push_back(sector.angle_end);
+
+    msg.level_max = std::max(msg.level_max, sector.level);
+    level_sum += sector.level;
+    msg.warning = msg.warning || sector.warning;
+    msg.error = msg.error || sector.error;
+  }
+  if (!sectors.empty()) {
+    msg.level_mean = static_cast<float>(level_sum / sectors.size());
+  }
+
+  m_contamination_measurement_publisher->publish(msg);
 }
 
 std::string boolToString(bool b) { return b ? "true" : "false"; }

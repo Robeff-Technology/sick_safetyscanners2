@@ -59,3 +59,23 @@
     # Esik her zaman filtrelenmis level_* alanlarina uygulanmalidir;
     # instant_* alanlari teshis icindir.
     contamination_filter_alpha: 0.02
+
+    # --- Cihazin kendi kontaminasyon olcumu -------------------------------
+    # sick_contamination_measurement topic'ini uretir. Yukaridaki turetilmis
+    # yuzdeden farkli olarak bu, cihazin optik kapak uzerinde yaptigi gercek
+    # olcumdur: Safety Designer arayuzunde gorunen deger ve onun arkasindaki
+    # sektor bazli degerler. CoLa2 uzerinden okunur.
+    #
+    # UYARI: CoLa2 verisi guvenlik acisindan non-safe'dir, sadece teshis ve
+    # bakim icin kullanilmalidir.
+
+    # Hangi CoLa2 degiskeninin okunacagini ve cevabin yapisini secer:
+    #   nanoScan3    -> degisken 373, 17 sektor
+    #   microScan3   -> degisken 371, 15 sektor
+    #   outdoorScan3 -> degisken 371, 15 sektor
+    device_variant: "nanoScan3"
+
+    # Olcumun kac saniyede bir okunacagi. Kir dakikalar-saatler icinde
+    # biriktigi icin seyrek okuma yeterlidir ve CoLa2 oturumunu mesgul etmez.
+    # 0 veya negatif deger yayini tamamen kapatir.
+    contamination_poll_period: 5.0
