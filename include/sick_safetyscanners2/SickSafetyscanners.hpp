@@ -45,6 +45,7 @@
 
 #include <sick_safetyscanners2_interfaces/msg/contamination_level.hpp>
 #include <sick_safetyscanners2_interfaces/msg/contamination_measurement.hpp>
+#include <sick_safetyscanners2_interfaces/msg/contamination_scan.hpp>
 
 #include <sick_safetyscanners2/utils/Conversions.h>
 #include <sick_safetyscanners2/utils/MessageCreator.h>
@@ -140,6 +141,7 @@ public:
                                             0.02);
     node.template declare_parameter<std::string>("device_variant", "nanoScan3");
     node.template declare_parameter<double>("contamination_poll_period", 5.0);
+    node.template declare_parameter<bool>("contamination_per_beam", false);
   }
 
   /**
@@ -324,6 +326,11 @@ public:
                                         m_contamination_poll_period);
     RCLCPP_INFO(getLogger(), "contamination_poll_period: %f",
                 m_contamination_poll_period);
+
+    node.template get_parameter<bool>("contamination_per_beam",
+                                      m_contamination_per_beam);
+    RCLCPP_INFO(getLogger(), "contamination_per_beam: %s",
+                btoa(m_contamination_per_beam).c_str());
   }
 
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr
@@ -355,6 +362,10 @@ public:
   sick::datastructure::ContaminationVariant m_device_variant =
       sick::datastructure::ContaminationVariant::NANO_SCAN3;
   double m_contamination_poll_period = 5.0;
+  bool m_contamination_per_beam = false;
+  rclcpp::Publisher<
+      sick_safetyscanners2_interfaces::msg::ContaminationScan>::SharedPtr
+      m_contamination_scan_publisher;
 
   // Device and Communication
   std::unique_ptr<sick::AsyncSickSafetyScanner> m_device;
@@ -408,10 +419,19 @@ public:
     m_contamination_measurement_publisher = node->template create_publisher<
         sick_safetyscanners2_interfaces::msg::ContaminationMeasurement>(
         "sick_contamination_measurement", 1);
+    if (m_contamination_per_beam) {
+      m_contamination_scan_publisher = node->template create_publisher<
+          sick_safetyscanners2_interfaces::msg::ContaminationScan>(
+          "sick_contamination_scan", 1);
+    }
     if (m_contamination_poll_period > 0.0) {
       m_contamination_measurement_timer = node->create_wall_timer(
           std::chrono::duration<double>(m_contamination_poll_period),
-          [this, node]() { publishContaminationMeasurement(node->now()); });
+          [this, node]() {
+            const rclcpp::Time now = node->now();
+            publishContaminationMeasurement(now);
+            publishContaminationScan(now);
+          });
     }
 
     // Start async receiving and processing of sensor data
@@ -442,6 +462,15 @@ public:
    * @param now Timestamp for the message header
    */
   void publishContaminationMeasurement(const rclcpp::Time &now);
+
+  /*!
+   * Read the device's contamination measurement projected onto every
+   * measurement beam over CoLa2 and publish it. Does nothing unless the
+   * contamination_per_beam parameter is set.
+   *
+   * @param now Timestamp for the message header
+   */
+  void publishContaminationScan(const rclcpp::Time &now);
 
   // Diagnostics
   sick_safetyscanners2_interfaces::msg::RawMicroScanData m_last_raw_msg;

@@ -159,6 +159,7 @@ void SickSafetyscanners::stopCommunication() {
   m_contamination_level_publisher.reset();
   m_contamination_measurement_timer.reset();
   m_contamination_measurement_publisher.reset();
+  m_contamination_scan_publisher.reset();
   m_contamination_ema_warning = -1.0;
   m_contamination_ema_contamination = -1.0;
 }
@@ -304,6 +305,51 @@ void SickSafetyscanners::publishContaminationMeasurement(
   }
 
   m_contamination_measurement_publisher->publish(msg);
+}
+
+void SickSafetyscanners::publishContaminationScan(const rclcpp::Time &now) {
+  if (!m_contamination_scan_publisher || !m_device) {
+    return;
+  }
+
+  sick::datastructure::ContaminationScan scan;
+  if (!m_device->requestContaminationScan(scan)) {
+    static rclcpp::Clock throttle_clock(RCL_STEADY_TIME);
+    RCLCPP_WARN_THROTTLE(
+        getLogger(), throttle_clock, 60000,
+        "Could not read the per beam contamination from the device. This "
+        "variable needs firmware 1.66 (nanoScan3) or 1.7x (microScan3, "
+        "outdoorScan3); set contamination_per_beam to false if the device "
+        "does not support it.");
+    return;
+  }
+
+  sick_safetyscanners2_interfaces::msg::ContaminationScan msg;
+  msg.header.stamp = now;
+  msg.header.frame_id = m_config.m_frame_id;
+  msg.valid = scan.isValid();
+
+  const std::vector<sick::datastructure::ContaminationBeam> &beams =
+      scan.getBeams();
+  msg.num_beams = static_cast<uint32_t>(beams.size());
+  msg.level.reserve(beams.size());
+  msg.warning.reserve(beams.size());
+  msg.error.reserve(beams.size());
+
+  double level_sum = 0.0;
+  for (const auto &beam : beams) {
+    msg.level.push_back(beam.level);
+    msg.warning.push_back(beam.warning);
+    msg.error.push_back(beam.error);
+
+    msg.level_max = std::max(msg.level_max, beam.level);
+    level_sum += beam.level;
+  }
+  if (!beams.empty()) {
+    msg.level_mean = static_cast<float>(level_sum / beams.size());
+  }
+
+  m_contamination_scan_publisher->publish(msg);
 }
 
 std::string boolToString(bool b) { return b ? "true" : "false"; }

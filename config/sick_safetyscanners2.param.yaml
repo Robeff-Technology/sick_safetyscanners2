@@ -79,3 +79,11 @@
     # biriktigi icin seyrek okuma yeterlidir ve CoLa2 oturumunu mesgul etmez.
     # 0 veya negatif deger yayini tamamen kapatir.
     contamination_poll_period: 5.0
+
+    # Isin basina kontaminasyon (sick_contamination_scan topic'i, CoLa2
+    # degiskeni 282). Ayni olcumun sektorler yerine tek tek olcum isinlarina
+    # dusurulmus hali; kirin yerini tarama cozunurlugunde gosterir.
+    # Yalnizca nanoScan3 FW 1.66 / microScan3 / outdoorScan3 FW 1.7x ve
+    # sonrasinda okunabilir, o yuzden varsayilan olarak kapalidir.
+    # Ayni timer'da okunur, yani periyodu contamination_poll_period belirler.
+    contamination_per_beam: false
