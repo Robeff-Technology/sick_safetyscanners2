@@ -86,4 +86,4 @@
     # Yalnizca nanoScan3 FW 1.66 / microScan3 / outdoorScan3 FW 1.7x ve
     # sonrasinda okunabilir, o yuzden varsayilan olarak kapalidir.
     # Ayni timer'da okunur, yani periyodu contamination_poll_period belirler.
-    contamination_per_beam: false
+    contamination_per_beam: true
