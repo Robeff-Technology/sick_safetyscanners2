@@ -14,7 +14,10 @@
     host_udp_port: 0              # 0 = surucu bos bir port secsin
 
     # --- Tarama ------------------------------------------------------------
-    frame_id: "scan"
+    # Sensor kit URDF'inin yayinladigi link adi. Eskiden "scan" idi; o isimde bir TF
+    # frame'i olmadigi icin tarama basliklarindan yapilan tf2 lookup'lari basarisiz
+    # oluyordu ve tuketicilerin frame'i ayrica parametreden almasi gerekiyordu.
+    frame_id: "sick_safetyscanner_base_link"
     channel: 0
     channel_enabled: true
     skip: 0                       # n tarama atla; 0 = her taramayi yayinla
@@ -86,4 +89,4 @@
     # Yalnizca nanoScan3 FW 1.66 / microScan3 / outdoorScan3 FW 1.7x ve
     # sonrasinda okunabilir, o yuzden varsayilan olarak kapalidir.
     # Ayni timer'da okunur, yani periyodu contamination_poll_period belirler.
-    contamination_per_beam: false
+    contamination_per_beam: true
