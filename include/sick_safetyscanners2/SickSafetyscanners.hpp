@@ -141,6 +141,10 @@ public:
                                             0.02);
     node.template declare_parameter<std::string>("device_variant", "nanoScan3");
     node.template declare_parameter<double>("contamination_poll_period", 5.0);
+    // Our own cleaning threshold, published with every measurement so every
+    // consumer draws the same line.
+    node.template declare_parameter<double>(
+        "contamination_attention_threshold", 30.0);
     node.template declare_parameter<bool>("contamination_per_beam", false);
   }
 
@@ -326,6 +330,19 @@ public:
                                         m_contamination_poll_period);
     RCLCPP_INFO(getLogger(), "contamination_poll_period: %f",
                 m_contamination_poll_period);
+    node.template get_parameter<double>("contamination_attention_threshold",
+                                        m_contamination_attention_threshold);
+    // Outside the device's own scale it would mark every cover dirty or none.
+    if (!(m_contamination_attention_threshold >= 0.0) ||
+        m_contamination_attention_threshold > 100.0) {
+      RCLCPP_WARN(getLogger(),
+                  "contamination_attention_threshold is %f, which is outside "
+                  "0..100; falling back to 30.0.",
+                  m_contamination_attention_threshold);
+      m_contamination_attention_threshold = 30.0;
+    }
+    RCLCPP_INFO(getLogger(), "contamination_attention_threshold: %f",
+                m_contamination_attention_threshold);
 
     node.template get_parameter<bool>("contamination_per_beam",
                                       m_contamination_per_beam);
@@ -362,6 +379,7 @@ public:
   sick::datastructure::ContaminationVariant m_device_variant =
       sick::datastructure::ContaminationVariant::NANO_SCAN3;
   double m_contamination_poll_period = 5.0;
+  double m_contamination_attention_threshold = 30.0;
   bool m_contamination_per_beam = false;
   rclcpp::Publisher<
       sick_safetyscanners2_interfaces::msg::ContaminationScan>::SharedPtr

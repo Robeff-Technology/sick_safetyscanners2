@@ -80,6 +80,13 @@
     # 0 veya negatif deger yayini tamamen kapatir.
     contamination_poll_period: 5.0
 
+    # Percent at which the cover is worth cleaning. Ours, not the device's
+    # (57.1% warning, 100% error); this sits below both. Published with the
+    # measurement, so FMS and the tablet hold no constant of their own — the
+    # single place to change it per vehicle. Provisional; outside 0..100 falls
+    # back to 30.0. A maintenance hint, never a safety decision.
+    contamination_attention_threshold: 30.0
+
     # Isin basina kontaminasyon (sick_contamination_scan topic'i, CoLa2
     # degiskeni 282). Ayni olcumun sektorler yerine tek tek olcum isinlarina
     # dusurulmus hali; kirin yerini tarama cozunurlugunde gosterir.

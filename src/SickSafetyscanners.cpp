@@ -283,6 +283,8 @@ void SickSafetyscanners::publishContaminationMeasurement(
   msg.header.frame_id = m_config.m_frame_id;
   msg.processing_state = info.getProcessingState();
   msg.valid = info.isValid();
+  msg.attention_threshold =
+      static_cast<float>(m_contamination_attention_threshold);
 
   const std::vector<sick::datastructure::ContaminationSector> &sectors =
       info.getSectors();
